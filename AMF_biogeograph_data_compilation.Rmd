@@ -1,0 +1,414 @@
+---
+title: "AMF_bigeograph_data_compilation"
+author: "Smriti Pehim Limbu"
+date: "2025-04-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##package upload
+```{r}
+
+install.packages("pacman")
+library(pacman)
+pacman::p_load(readr, dplyr, tidyverse)
+```
+
+#uploading data
+
+```{r}
+df_biogeography <- read.csv(file.path(L0_dir, "AMF_Biogeography_Database_June_2023.csv"), stringsAsFactors = FALSE) #Stürmer dataset
+full_database_df <- readRDS("C:/Users/smrit/OneDrive - Dartmouth College/AMF_spore_biogeography/full_database_df.RDS") #Zahn dataset
+```
+
+#Changing species names of Zahn dataset for merge
+
+```{r}
+# Create a named vector of replacements
+name_corrections <- c(
+  "Claroideoglomus candidum" = "Entrophospora candidum",
+  "Cetraspora gilmorei" = "Scutellospora gilmorei",
+  "Cetraspora nodosa" = "Scutellospora nodosa",
+  "Claroideoglomus claroideum" = "Entrophospora claroideum",
+  "Claroideoglomus drummondii" = "Entrophospora drummondii",
+  "Claroideoglomus etunicatum" = "Entrophospora etunicatum",
+  "Claroideoglomus lamellosum" = "Entrophospora lamellosum",
+  "Entrophospora lamellosa" = "Entrophospora lamellosum",
+  "Funneliformis caledonius" = "Funneliformis caledonium",
+  "Funneliformis coronatus" = "Funneliformis coronatum",
+  "Funneliformis geosporum" = "Funneliformis geosporus",
+  "Funneliglomus sanmartinense" = "Funneliglomus sanmartinensis",
+  "Halonatospora panshihalos" = "Halonatospora pansihalos",
+  "Redeckera fulva" = "Redeckera fulvum",
+  "Rhizophagus microaggregatum" = "Rhizoglomus microaggregatum",
+  "Rhizophagus proliferus" = "Rhizophagus prolifer",
+  "Scutellospora cerradensis" = "Dentiscutata cerradensis",
+  "Scutellospora heterogama" = "Dentiscutata heterogama"
+)
+
+# Apply the replacements, change latitude and longitude spellings, and group by sequences
+df_global.am <- full_database_df %>%
+  mutate(good.names = recode(good.names, !!!name_corrections)) %>%
+  dplyr::rename(
+    Latitude_Decimal = latitude,
+    Longitude_Decimal = longitude
+  ) %>%  mutate(site=paste(paper_id, Latitude_Decimal, Longitude_Decimal, sep = "_")) %>% group_by(site)%>% mutate(id = 0 + cur_group_id())%>%  
+  ungroup() %>% group_by(id, good.names, Latitude_Decimal, Longitude_Decimal, year_of_sampling, Biome, plants_dominant, target_gene, sequencing_platform, sample_type, primers, marker, marker_size) %>% dplyr::summarize(MAT=mean(MAT, na.rm=TRUE), MAP=mean(MAP, na.rm=TRUE), pH=mean(pH, na.rm=TRUE), abundances=mean(abundances, na.rm=TRUE))
+
+```
+
+#Now editing Stürmer dataset, first changing latitue and longitude to decimals and cleaning east west in coordinates
+
+```{r}
+#Adding latitude and longitude to Stürmer dataset
+# Function to convert degrees, minutes, seconds to decimal degrees
+convert_to_decimal_latitude <- function(Lat_Degrees, Lat_Min, Lat_Sec) {
+  Lat_decimal_degrees <- Lat_Degrees + (Lat_Min / 60) + (Lat_Sec / 3600)
+  return(Lat_decimal_degrees)
+}
+
+convert_to_decimal_longitude <- function(Long_Degrees, Long_Min, Long_Sec) {
+  Long_decimal_degrees <- Long_Degrees + (Long_Min / 60) + (Long_Sec / 3600)
+  return(Long_decimal_degrees)
+}
+
+# Apply the function to data frame, but first create good.names
+df_biogeography.good.names <- df_biogeography %>% mutate(good.names=paste(Genus, Species, sep = "_"))
+
+df_biogeography_lat.long <- df_biogeography.good.names %>% mutate(Latitude_Decimal = convert_to_decimal_latitude(Lat_Degrees, Lat_Min, Lat_Sec)) %>% mutate( Longitude_Decimal = convert_to_decimal_longitude(Long_Degrees, Long_Min, Long_Sec))
+
+#Make directions consistent for lat and long
+df_biogeography.a <- df_biogeography_lat.long %>% mutate(North_South=case_when(North_South=="s"~"S", TRUE~North_South)) %>% mutate(North_South=case_when(North_South=="n"~"N", TRUE~North_South)) %>% mutate(North_South=case_when(North_South=="nn"~"N", TRUE~North_South))  %>% mutate(North_South=case_when(North_South=="m"~"N", TRUE~North_South))  %>% mutate(North_South=case_when(North_South=="nm"~"N", TRUE~North_South)) %>% mutate(East_West=case_when(East_West=="e"~"E", TRUE~East_West))%>% mutate(East_West=case_when(East_West=="w"~"W", TRUE~East_West)) %>%  mutate(East_West=case_when(East_West=="n"~"W", TRUE~East_West)) %>% mutate(East_West=case_when(East_West=="ww"~"W", TRUE~East_West))%>% mutate(East_West=case_when(East_West=="2"~"W", TRUE~East_West))%>% mutate(East_West=case_when(East_West=="N"~"W", TRUE~East_West))
+
+df_biogeography_lat.long.decimal <- within(df_biogeography.a, {
+             Latitude_Decimal <- ifelse(North_South=="N", Latitude_Decimal, -Latitude_Decimal)
+             Longitude_Decimal <- ifelse(East_West=="E", Longitude_Decimal, -Longitude_Decimal)
+})
+
+unique(df_biogeography_lat.long.decimal.clean$good.names)
+```
+
+##Editing and cleaning species names in Stürmer dataset for merge
+
+```{r}
+name_corrections <- c(
+  "Acaulospora_nicolsonii" = "Ambispora_nicolsonii",
+  "Acaulospora_paulineae" = "Acaulospora_paulinae",
+  "Acaulospora_siverdingii" = "Acaulospora_sieverdingii",
+  "Acaulospora_sporocarpica" = "Acaulospora_sporocarpia",
+  "Acaulospora_tuberculosa" = "Acaulospora_tuberculata",
+  "Acaulospora_undulata" = "Archaeospora_undulata",
+  "Ambispora_lepoticha" = "Ambispora_leptoticha",
+  "Ambispora_leptotich" = "Ambispora_leptoticha",
+  "Archaeospora_ecuadoriana" = "Archaeospora_ecuadoriana",
+  "Archaeospora_europaea" = "Archaeospora_europea",
+  "Archaeospora_spainiae" = "Archaeospora_spainii",
+  "Cetraspora_armeniaca" = "Scutellospora_armeniaca",
+  "Cetraspora_gilmorei" = "Scutellospora_gilmorei",
+  "Cetraspora_heterogama" = "Dentiscutata_heterogama",
+  "Cetraspora_nodosa" = "Scutellospora_nodosa",
+  "Cetraspora_pellucida" = "Scutellospora_pellucida",
+  "Cetraspora_savannicola" = "Dentiscutata_savannicola",
+  "Cetraspora_spinosissima" = "Scutellospora_spinosissima",
+  "Claroideoglomus_candidum" = "Entrophospora_candidum",
+  "Claroideoglomus_claoroideum" = "Entrophospora_claroideum",
+  "Claroideoglomus_claroideum?" = "Entrophospora_claroideum",
+  "Claroideoglomus_drummondii" = "Entrophospora_drummondii",
+  "Claroideoglomus_etunicatum" = "Entrophospora_etunicatum",
+  "Claroideoglomus_hanlinii" = "Entrophospora_hanlinii",
+  "Claroideoglomus_lamellosum" = "Entrophospora_lamellosum",
+  "Claroideoglomus_luteum" = "Entrophospora_luteum",
+  "Claroideoglomus_walkeri" = "Entrophospora_walkeri",
+  "Corymbiglomus_corymbiformis" = "Corymbiglomus_corymbiforme",
+  "Corymbiglomus_globifera" = "Corymbiglomus_globiferum",
+  "Dentiscutata_biornata" = "Scutellospora_biornata",
+  "Dentiscutata_erythropa" = "Dentiscutata_erythropus",
+  "Dentiscutata_hawaiiensis" = "Scutellospora_hawaiiensis",
+  "Dentiscutata_scutata" = "Scutellospora_scutata",
+  "Diversispora_aurantium" = "Diversispora_aurantia",
+  "Diversispora_iranica" = "Dominikia_iranica",
+  "Diversispora_trimulares" = "Diversispora_trimurales",
+  "Diversispora_versiforme" = "Glomus_versiforme",
+  "Diversispora_versiformis" = "Glomus_versiforme",
+  "Dominikia _iranica" = "Dominikia_iranica",
+  "Dominikia _minuta" = "Dominikia_minuta",
+  "Domnikia_aurea" = "Dominikia_aurea",
+  "Entrophospora _infrequens" = "Entrophospora_infrequens",
+  "Entrophospora_Infrequens" = "Entrophospora_infrequens",
+  "Entrophspora_infrequens" = "Entrophospora_infrequens",
+  "Funneliformis_caldeonius" = "Funneliformis_caledonium",
+  "Funneliformis_caledonium?" = "Funneliformis_caledonium",
+  "Funneliformis_caledonius" = "Funneliformis_caledonium",
+  "Funneliformis_coronatus" = "Funneliformis_coronatum",
+  "Funneliformis_dimorphicum" = "Funneliformis_dimorphicus",
+  "Funneliformis_fragilistratum" = "Funneliformis_fragilistratus",
+  "Funneliformis_geosporum" = "Funneliformis_geosporus",
+  "Funneliformis_geosporum?" = "Funneliformis_geosporus",
+  "Funneliformis_halonatum" = "Funneliformis_halonatus",
+  "Funneliformis_monosporum" = "Funneliformis_monosporus",
+  "Funneliformis_multiforum" = "Funneliformis_multiforus",
+  "Funneliformis_verruculosum" = "Funneliformis_verruculosus",
+  "Fuscutata_aurea" = "Dentiscutata_aurea",
+  "Glomus _microaggregatum" = "Rhizoglomus_microaggregatum",
+  "Glomus_aggreatum" = "Rhizophagus_aggregatus",
+  "Glomus_aggregatum" = "Rhizophagus_aggregatus",
+  "Glomus_antarcticum" = "Rhizophagus_antarcticus",
+  "Glomus_aureum" = "Dominikia_aurea",
+  "Glomus_avelingiae" = "Redeckera_avelingiae",
+  "Glomus_badium" = "Funneliformis_badium",
+  "Glomus_canadense" = "Redeckera_canadensis",
+  "Glomus_candidum" = "Entrophospora_candidum",
+  "Glomus_delihense" = "Glomus_delhiense",
+  "Glomus_epigaeum" = "Diversispora_epigaea",
+  "Glomus_fragile" = "Redeckera_fragilis",
+  "Glomus_geosporum" = "Funneliformis_geosporus",
+  "Glomus_gibbosum" = "Diversispora_gibbosa",
+  "Glomus_hederabadensis" = "Glomus_hyderabadensis",
+  "Glomus_hyderabadense" = "Glomus_hyderabadensis",
+  "Glomus_insculptum" = "Diversispora_insculpta",
+  "Glomus_invermaium" = "Rhizophagus_invermaius",
+  "Glomus_micraggregatum" = "Rhizoglomus_microaggregatum",
+  "Glomus_microaggregatum" = "Rhizoglomus_microaggregatum",
+  "Glomus_multiforum" = "Funneliformis_multiforus",
+  "Glomus_pustulatum" = "Diversispora_pustulata",
+  "Glomus_tenebrosum?" = "Glomus_tenebrosum",
+  "Glomus_tenerum" = "Diversispora_tenera",
+  "Innospora_majewski" = "Innospora_majewskii",
+  "innospora_majewskii" = "Innospora_majewskii",
+  "Intrornatospora_intraornata" = "Intraornatospora_intraornata",
+  "Microkamieskia_perpusilla" = "Microkamienskia_perpusilla",
+  "Mikrokamienskia_perpusilla" = "Microkamienskia_perpusilla",
+  "Nanoglomus_plukenetia" = "Nanoglomus_plukenetiae",
+  "Oehlia_diapahna" = "Oehlia_diaphana",
+  "Oehlia_diaphan" = "Oehlia_diaphana",
+  "Pacispora_boliviana" = "Paraglomus_bolivianum",
+  "Pacispora_coralloidea" = "Pacispora_coralloidae",
+  "Pacispora_dominikii" = "Pacispora_scintillans",
+  "Pacispora_robiginia" = "Pacispora_robigina",
+  "Paraglomus_brazilianum" = "Paraglomus_brasilianum",
+  "Paraglomus_majewskii" = "Innospora_majewskii",
+  "Paraglomus_occultm" = "Paraglomus_occultum",
+  "Paraglomus_occultum?" = "Paraglomus_occultum",
+  "Paraglomus_pernabucanum" = "Paraglomus_pernambucanum",
+  "Pervetustus _simplex" = "Pervetustus_simplex",
+  "Racocetra_alboreosea" = "Racocetra_alborosea",
+  "Racocetra_beninenses" = "Racocetra_beninensis",
+  "Scutellospora_weresubiae" = "Racocetra_weresubiae",
+  "Redeckera_fulva" = "Redeckera_fulvum",
+  "Redeckera_megalocarpum" = "Redeckera_megalocarpa",
+  "Rhizoglomus _melanum" = "Rhizophagus_melanus",
+  "Rhizoglomus_dalpeae" = "Rhizophagus_dalpeae",
+  "Rhizoglomus_dunense" = "Rhizophagus_dunensis",
+  "Rhizoglomus_maiae" = "Rhizophagus_maiae",
+  "Rhizoglomus_natalense" = "Rhizophagus_natalensis",
+  "Rhizoglomus_silesianum" = "Rhizophagus_silesianum",
+  "Rhizoglomus_variabile" = "Rhizophagus_variabilis",
+  "Rhizoglomus_venetianum" = "Rhizophagus_irregularis",
+  "Rhizophagus_aggregatum" = "Rhizophagus_aggregatus",
+  "Rhizophagus_clarus?" = "Rhizophagus_clarus",
+  "Rhizophagus_claurs" = "Rhizophagus_clarus",
+  "Rhizophagus_fasciculatum" = "Rhizophagus_fasciculatus",
+  "Rhizophagus_Intraradices" = "Rhizophagus_intraradices",
+  "Rhizophagus_irregulare" = "Rhizophagus_irregularis",
+  "Rhizophagus_neocaledonicus" = "Silvaspora_neocaledonica",
+  "Rhizophagus_proliferum" = "Rhizophagus_prolifer",
+  "Rhizophagus_proliferus" = "Rhizophagus_prolifer",
+  "Rhizophagus_vesiculiferus" = "Rhizophagus_vesiculifer",
+  "Sclerocystis_sinuosum" = "Sclerocystis_sinuosa",
+  "Scutellospora_auriglobosa" = "Scutellospora_aurigloba",
+  "Scutellospora_dipurparescens" = "Scutellospora_dipurpurescens",
+  "Scutellospora_dipurpurascens" = "Scutellospora_dipurpurescens",
+  "Scutellospora_dipurpurescans" = "Scutellospora_dipurpurescens",
+  "Scutellospora_hawaiiensis" = "Scutellospora_hawaiiensis",
+  "Dentiscutata_reticulata" = "Scutellospora_reticulata",
+  "Scutellospora_spinossisima" = "Scutellospora_spinosissima",
+  "Scutellospora_striata" = "Cetraspora_striata",
+  "Septoglomus_constrictus" = "Septoglomus_constrictum",
+  "Septoglomus_constricum" = "Septoglomus_constrictum",
+  "Sieverdingia _tortuosa" = "Sieverdingia_tortuosa",
+  "SIeverdingia_tortuosa" = "Sieverdingia_tortuosa"
+)
+
+
+# Apply the replacements
+df_biogeography_lat.long.decimal.clean <- df_biogeography_lat.long.decimal %>% mutate(
+    good.names = recode(good.names, !!!name_corrections),
+    good.names = gsub("_", " ", good.names),
+    Year = as.character(Year))
+
+```
+
+#Further cleaning and editing of Stürmer dataset 
+
+```{r}
+#mutate id for Stürmer dataset starting from 1430 and select only necessary columns
+df_biogeography.final <- df_biogeography_lat.long.decimal.clean %>%filter(!is.na(Latitude_Decimal)) %>% filter(!is.na(Longitude_Decimal)) %>% mutate(Year=case_when(Year =="105"~"2015", TRUE~Year)) %>% mutate(Year=case_when(Year == "199"~ "1991", TRUE~Year)) %>% mutate(Year=case_when(Year=="20042004"~"2004", TRUE~Year)) %>% mutate(Year=case_when(Year=="19891989"~"1989", TRUE~Year)) %>%  mutate(site=paste(Reference.Title, Latitude_Decimal, Longitude_Decimal, sep = "_")) %>% group_by(site) %>%
+  mutate(id = 1429 + cur_group_id()) %>% ungroup() %>%  dplyr::select(-c(Order, Family, Genus, Species, Biogeographical.Realm, Ecol.Region, Community, Continent, Country, State_Province, Location, Lat_Degrees, Lat_Min, Lat_Sec,North_South, Lat_Origin, Long_Degrees, Long_Min, Long_Sec, East_West, Long_Origin, Hemisphere, Soil.P, Soil.N, Soil.C, Organic.Matter, Temp_Data, Prec_Origin, Altitude, Altitude_Origin, Other.Literature., Description., Heavy.Metals, Collector, Notes, pH, Eco.region, site, Year, Reference.Title))
+```
+
+#Joining Zahn and Stürmer datasets
+```{r}
+df_metadata<- merge(df_global.am , df_biogeography.final, by=c("good.names", "Latitude_Decimal", "Longitude_Decimal", "id"), all = TRUE)
+
+length(unique(df_metadata$good.names))
+
+df_metadata$Soil.pH=as.numeric(df_metadata$Soil.pH)
+
+#edit relevant columns
+df_metadata.correction1 <- df_metadata %>% mutate(Biome=coalesce(Biome.x, Biome.y)) %>% dplyr::select(-c("Biome.x", "Biome.y")) %>% mutate(sample_type=coalesce(sample_type, Source)) %>% dplyr::select(-Source) %>% mutate(soil.pH=coalesce(pH, Soil.pH)) %>% dplyr::select(-c("pH", "Soil.pH")) %>% mutate(across(c("Host"), ~na_if(.x, ""))) 
+
+#edit biome information
+df_metadata.final <- df_metadata.correction1%>% mutate(Biome = case_when(
+    Biome == "Tropical and Subtropical Grasslands, Savannas and Shrublands" ~ "Grassland",
+    Biome == "Temperate Broadleaf and Mixed Forests" ~ "Forest",
+    Biome == "Tropical and Subtropical Moist Broadleaf Forests" ~ "Forest",
+    Biome == "Temperate Grasslands, Savannas and Shrublands" ~ "Grassland",
+    Biome == "Temperate Conifer Forests" ~ "Forest",
+    Biome == "Mediterranean Forests, Woodlands and Scrub" ~ "Forest",
+    Biome == "Flooded Grasslands and Savannas" ~ "Grassland",
+    Biome == "Tropical and Subtropical Dry Broadleaf Forests" ~ "Forest",
+    Biome == "Deserts and Xeric Shrublands" ~ "Desert",
+    Biome == "Tropical and Subtropical Coniferous Forests" ~ "Forest",
+    Biome == "Montane Grasslands and Shrublands" ~ "Grassland",
+    Biome == "Tundra" ~ "Tundra",
+    Biome == "Mangroves" ~ "Forest",
+    Biome == "Boreal Forests/Taiga" ~ "Forest",
+    Biome == "Mediterranean Forest, Woodlands & Scrubs" ~ "Forest",
+    Biome == "Temperate Broadleaf & Mixed Forests" ~ "Forest",
+    Biome == "Boreal Forest/Taiga" ~ "Forest",
+    Biome == "Desert and Xeric Shrublands" ~ "Desert",
+    Biome=="woodland"~"Forest",
+    Biome=="forest"~"Forest",
+    Biome=="shrubland"~"Shrubland",
+    Biome=="tundra"~"Tundra",
+    Biome=="anthropogenic"~"Anthropogenic",
+    Biome=="aquatic"~"Aquatic",
+    Biome=="desert"~"Desert",
+    Biome=="grassland"~"Grassland",
+    Biome=="cropland"~"Cropland",
+    Biome=="wetland"~"Wetland",
+    TRUE ~ Biome
+  ))
+```
+
+#Extract worldclim data for all lat long data points
+
+```{r}
+#long, lat file
+df_long.lat <- df_metadata.final %>% dplyr::select(Longitude_Decimal, Latitude_Decimal) %>% unique()
+
+# Download WorldClim temperature data (tmean) at 10 minutes resolution
+worldclim_tmean <- worldclim_global(var = "tavg",res = 10, path = tempdir(), version = "2.1")
+worldclim_tmean_list<- stack(worldclim_tmean)
+
+points.tmean <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_tmean_list)))
+values.tmean <- extract(worldclim_tmean_list,points.tmean)
+df_extracted_from_worldclim.tmean <- cbind.data.frame(coordinates(points.tmean),values.tmean)
+colnames(df_extracted_from_worldclim.tmean)
+df_worldclim.tmean <- df_extracted_from_worldclim.tmean %>% rowwise() %>%  mutate(mean_annual_temp_worldclim = mean(c_across(starts_with("wc2.1_10m_tavg_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_tavg_"))
+
+# Download WorldClim precipitation data (prec) at 10 minutes resolution
+worldclim_prec <- worldclim_global(var = "prec", res = 10, path = tempdir(), version="2.1")
+worldclim_prec_list<- stack(worldclim_prec)
+
+points.prec <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_prec_list)))
+values.prec <- extract(worldclim_prec_list,points.prec)
+df_extracted_from_worldclim.prec <- cbind.data.frame(coordinates(points.prec),values.prec)
+colnames(df_extracted_from_worldclim.prec)
+df_worldclim.prec <- df_extracted_from_worldclim.prec %>% rowwise() %>%  mutate(mean_annual_prec_worldclim = mean(c_across(starts_with("wc2.1_10m_prec_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_prec_"))
+
+#tmin
+worldclim_tmin <- worldclim_global(var = "tmin", res = 10, path = tempdir(), version = "2.1")
+worldclim_tmin_list<- stack(worldclim_tmin)
+
+points.tmin <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_tmin_list)))
+values.tmin <- extract(worldclim_tmin_list,points.tmin)
+df_extracted_from_worldclim.tmin <- cbind.data.frame(coordinates(points.tmin),values.tmin)
+
+colnames(df_extracted_from_worldclim.tmin)
+df_worldclim.tmin <- df_extracted_from_worldclim.tmin %>% rowwise() %>%  mutate(mean_annual_tmin_worldclim = mean(c_across(starts_with("wc2.1_10m_tmin_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_tmin_"))
+
+#tmax
+worldclim_tmax <- worldclim_global(var = "tmax", res = 10, path = tempdir(), version = "2.1")
+worldclim_tmax_list<- stack(worldclim_tmax)
+
+points.tmax <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_tmax_list)))
+values.tmax <- extract(worldclim_tmax_list,points.tmax)
+df_extracted_from_worldclim.tmax <- cbind.data.frame(coordinates(points.tmax),values.tmax)
+colnames(df_extracted_from_worldclim.tmax)
+df_worldclim.tmax <- df_extracted_from_worldclim.tmax %>% rowwise() %>%  mutate(mean_annual_tmax_worldclim = mean(c_across(starts_with("wc2.1_10m_tmax_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_tmax_"))
+
+#wind
+worldclim_wind <- worldclim_global(var = "wind", res = 10, path = tempdir(), version = "2.1")
+worldclim_wind_list<- stack(worldclim_wind)
+points <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_wind_list)))
+values <- extract(worldclim_wind_list,points)
+df_extracted_from_worldclim.wind <- cbind.data.frame(coordinates(points),values)
+colnames(df_extracted_from_worldclim.wind)
+
+df_worldclim.wind <- df_extracted_from_worldclim.wind %>% rowwise() %>%  mutate(mean_annual_wind = mean(c_across(starts_with("wc2.1_10m_wind_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_wind_"))
+
+##vapor pressure
+worldclim_vapor <- worldclim_global(var = "vapr", res = 10, path = tempdir(), version = "2.1")
+worldclim_vapor_list<- stack(worldclim_vapor)
+points.vapor <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_vapor_list)))
+values.vapor <- extract(worldclim_vapor_list,points.vapor)
+df_extracted_from_worldclim.vapor <- cbind.data.frame(coordinates(points.vapor),values.vapor)
+
+colnames(df_extracted_from_worldclim.vapor)
+df_worldclim.vapor <- df_extracted_from_worldclim.vapor %>% rowwise() %>%  mutate(mean_annual_vapor_worldclim = mean(c_across(starts_with("wc2.1_10m_vapr_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_vapr_"))
+
+##bio
+worldclim_bio <- worldclim_global(var = "bio", res = 10, path = tempdir(), version = "2.1")
+worldclim_bio_list<- stack(worldclim_bio)
+
+points.bio <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_bio_list)))
+values.bio <- extract(worldclim_bio_list,points.bio)
+df_extracted_from_worldclim.bio <- cbind.data.frame(coordinates(points.bio),values.bio)
+colnames(df_extracted_from_worldclim.bio)
+df_worldclim.bio <- df_extracted_from_worldclim.bio %>% rename(Prec.max.worldclim=wc2.1_10m_bio_16)%>% rename(Prec.min.worldclim=wc2.1_10m_bio_17)%>% rename(Prec.seasonality.worldclim=wc2.1_10m_bio_15)%>% rename(Prec.annual.worldclim=wc2.1_10m_bio_12)%>% rename(Temp.seasonality.worldclim=wc2.1_10m_bio_4)%>% rename(Temp.annual.worldclim=wc2.1_10m_bio_1)%>% rename(Temp.max.worldclim=wc2.1_10m_bio_5)%>% rename(Temp.min.worldclim=wc2.1_10m_bio_6) %>% dplyr::select(-starts_with("wc2.1_10m_bio_"))
+
+#combine the worldclim data files
+df_world.clim.all.variables <- merge(df_worldclim.bio, df_worldclim.vapor,  by = c("Longitude_Decimal", "Latitude_Decimal"), all.x= TRUE)
+                                  
+df_world.clim.all.variables <- merge(df_world.clim.all.variables, df_worldclim.wind, by = c("Longitude_Decimal", "Latitude_Decimal"), all.x= TRUE)
+```
+
+#Joining worldclim data to the df_metadata.final data
+
+```{r}
+df_metadata.final.with.worldclim <- merge(df_metadata.final, df_world.clim.all.variables, by =c("Longitude_Decimal", "Latitude_Decimal"), all=FALSE) %>% unique()
+str(df_metadata.final.with.worldclim)
+df_metadata.final.with.worldclim$Precipitation=as.numeric(df_metadata.final.with.worldclim$Precipitation)
+
+#cleaning it further
+unique(df_metadata.final.with.worldclim$sample_type)
+
+df_metadata.final.with.worldclim <- df_metadata.final.with.worldclim %>% mutate(sample_type=case_when(sample_type =="Field spores"~"Field", sample_type == "Field soil"~ "Field", sample_type=="Field sporse"~"Field", sample_type=="Field Soil"~"Field", sample_type=="Field Spores"~"Field", sample_type=="Fields"~"Field",sample_type=="FieldField"~"Field", sample_type=="Fields spores"~"Field", sample_type=="Pot Culture"~"Trap_culture", sample_type=="Pot Cultures"~"Trap_culture", sample_type=="Pot culture"~"Trap_culture", sample_type=="Pot cultures"~"Trap_culture", sample_type=="Trap cultures"~"Trap_culture", sample_type=="Trap culture"~"Trap_culture", sample_type=="Por culture"~"Trap_culture", sample_type=="Molecular data"~"Molecular_data",sample_type=="Molecular Data"~"Molecular_data",sample_type=="Moelcular data"~"Molecular_data", sample_type=="Molecular data "~"Molecular_data", sample_type=="Molecualr data"~"Molecular_data", sample_type=="Y Sfairi"~"Trap_culture",sample_type=="soil"~"Field",sample_type=="topsoil"~"Field",sample_type=="rhizosphere soil"~"Field",sample_type=="root"~"Field",TRUE~sample_type)) 
+
+#Cleaning ppt data from Sturmer dataset
+df_metadata.final.clean <- df_metadata.final.with.worldclim %>% mutate(Precipitation = case_when(Precipitation == 101310~1013.1, Precipitation == 171450~1714.5, Precipitation == 160970~1609.7, Precipitation == 97890~978.9, Precipitation == 94000~940, Precipitation== 73280~732.8, Precipitation== 72000~720, Precipitation== 65100~651, Precipitation== 60000~600, Precipitation== 56200~562, Precipitation== 53100~531, Precipitation== 51950~519.5, Precipitation== 50500~505, Precipitation== 49380~493.8, Precipitation== 45300~453, Precipitation== 45100~451, Precipitation== 44000~440, Precipitation== 43180~431.8, Precipitation== 40600~406, Precipitation== 38720~387.2, Precipitation== 38600~386, Precipitation== 38550~385.5, Precipitation== 35000~350, Precipitation == 34800~348, Precipitation== 31700~317, Precipitation== 29600~296, Precipitation== 26600~266, Precipitation ==26600~266,Precipitation== 24200~242, Precipitation== 23180~231.8, Precipitation== 22250~222.5, Precipitation== 20912~209.12, Precipitation== 19690~196.9, Precipitation== 19370~193.7, Precipitation== 16800~168, Precipitation== 16755~167.55, Precipitation== 16540~165.4, Precipitation== 11530~115.3, Precipitation== 11530~115.3, Precipitation== 9000~90, Precipitation== 8000~80, Precipitation== 7128~712.8, Precipitation== 7000~70, Precipitation==6700~67, Precipitation== 6132~613.2, Precipitation== 6000~60, Precipitation==5000~50, Precipitation== 4535~453.5, Precipitation== 4375~437.5, Precipitation== 4300~43,Precipitation== 3452~345.2, Precipitation== 3128~312.8, Precipitation==109000~1090, Precipitation==56500~565, TRUE~Precipitation)) #cleaning precipitation from Sidney's database
+
+#cleaning temperature data from Sturmer database
+df_meta.1 <- df_metadata.final.clean %>% mutate(Temperature = case_when(Temperature==-1000~-10, Temperature==-392~-3.92, Temperature==-170~-1.7, Temperature==-150~-1.5, Temperature== -73~-0.73, Temperature==-26~-0.26, Temperature==-25~-0.25, Temperature==-21~-2.1, Temperature==-17~-1.7, Temperature==8~0.8, Temperature==90~9, Temperature==106~10.6, Temperature==107~10.7, Temperature==110~11, Temperature==112~11.2, Temperature==113~11.3, Temperature==114~11.4, Temperature==115~11.5, Temperature==118~11.8, Temperature==120~1.2, Temperature==123~12.3, Temperature==125~12.5, Temperature==129~12.9, Temperature==137~13.7, Temperature==138~13.8, Temperature==139~13.9, Temperature==147~14.7, Temperature==150~15, Temperature==154~15.4, Temperature==155~15.5, Temperature==160~16, Temperature==161~16.1, Temperature==175~17.5, Temperature==182~18.2, Temperature==183~18.3, Temperature==185~18.5, Temperature==189~18.9, Temperature==190~19, Temperature==197~19.7, Temperature==199~19.9, Temperature==200~20, Temperature==202~20.2, Temperature==205~20.5, Temperature==206~20.6, Temperature==210~21, Temperature==211~21.1, Temperature==212~21.2, Temperature==213~21.3, Temperature==214~21.4, Temperature==217~21.7, Temperature==219~21.9, Temperature==220~22, Temperature==225~22.5, Temperature==229~22.9, Temperature==230~23, Temperature==233~23.3, Temperature==235~23.5, Temperature==237~23.7, Temperature==238~23.8, Temperature==240~24, Temperature==244~24.4, Temperature==249~24.9, Temperature==250~25, Temperature==255~25.5, Temperature==257~25.7, Temperature==258~25.8, Temperature==260~26, Temperature==262~26.2, Temperature==270~27, Temperature==271~27.1, Temperature==272~27.2, Temperature==275~27.5, Temperature==290~2.9, Temperature==300~30, Temperature==311~31.1, Temperature==400~4.9, Temperature==450~4.5, Temperature==475~4.75, Temperature==490~4.9, Temperature==500~5, Temperature==540~5.4, Temperature==570~5.7, Temperature==580~5.8, Temperature==600~6, Temperature==604~6.04, Temperature==610~6.1, Temperature==620~6.2, Temperature==630~6.3, Temperature==650~6.5, Temperature==700~7, Temperature==710~7.1, Temperature==720~7.2, Temperature==750~7.5, Temperature==800~8, Temperature==810~8.1, Temperature==820~8.2, Temperature==830~8.3, Temperature==840~8.4, Temperature==850~8.5, Temperature==880~8.8, Temperature==890~8.9, Temperature==900~9, Temperature==920~9.2, Temperature==923~9.23, Temperature==940~9.4, Temperature==944~9.44, Temperature==950~9.5, Temperature==970~9.7, Temperature==1000~10, Temperature==1100~11, TRUE~Temperature))
+                                                                      
+df_meta <- df_meta.1 %>% mutate(Temperature=case_when(Temperature==1200~12, Temperature==1250~12.5, Temperature==1270~12.7, Temperature==1320~13.2, Temperature==1390~13.9, Temperature==1400~14, Temperature==1410~14.10, Temperature==1450~14.5, Temperature==1470~14.7, Temperature==1500~15, Temperature==1520~15.2, Temperature==1550~15.5, Temperature==1560~15.6, Temperature==1590~15.9, Temperature==1620~16.2, Temperature==1650~16.5, Temperature==1665~16.65, Temperature==1670~16.7, Temperature==1680~16.8, Temperature==1690~16.9, Temperature==1700~17, Temperature==1730~17.3, Temperature==1740~17.4, Temperature==1750~17.5, Temperature==1760~17.6, Temperature==1770~17.7, Temperature==1840~18.4, Temperature==1850~18.5, Temperature==1910~19.1, Temperature==1920~19.2, Temperature==1930~19.3, Temperature==1950~19.5, Temperature==1990~19.9, Temperature==2020~20.2, Temperature==2060~20.6, Temperature==2070~20.7, Temperature==2120~21.2, Temperature==2130~21.3, Temperature==2140~21.4, Temperature==2150~21.5, Temperature==2190~21.9, Temperature==2200~22, Temperature==2250~22.5, Temperature==2260~22.6, Temperature==2340~23.4, Temperature==2350~23.5, Temperature==2390~23.9, Temperature==2400~24, Temperature==2460~24.6, Temperature==2467~24.67, Temperature==2490~24.9, Temperature==2500~25, Temperature==2550~25.5, Temperature==2580~25.8, Temperature==2600~26, Temperature==2610~26.1, Temperature==2620~26.2, Temperature==2650~26.5, Temperature==2660~26.6, Temperature==2670~26.7, Temperature==2680~26.8, Temperature==2710~27.1, Temperature==2720~27.2, Temperature==2740~27.4, Temperature==2750~27.5, Temperature==2790~27.9, Temperature==2800~28, Temperature==2950~29.5, Temperature==3000~30, Temperature==3150~31.5, Temperature==730~7.5, Temperature==715~7.15, Temperature==170~1.7,Temperature==780~7.8,Temperature==58~NA, Temperature==760~7.6, Temperature ==740~7.4, Temperature==910~9.1, TRUE~Temperature))
+
+unique(df_meta$Precipitation)
+
+unique(df_meta$Temperature)
+
+#coalesce temperature and precipitation with mat and map
+
+df_meta <- df_meta %>% mutate(MAP=coalesce(MAP, Precipitation)) %>% dplyr::select(-Precipitation) %>% mutate(MAT= coalesce(MAT, Temperature)) %>% dplyr::select(-Temperature) %>% filter(Biome!="") %>% filter(Biome!= "Rock and Ice")
+
+#remove few columns such as traits for the data publication
+
+df_meta_for_data_publication <- df_meta 
+length(unique(df_meta_for_data_publication$good.names))#343
+
+write.csv(df_meta_for_data_publication, "df_AMF_biogeography.csv")
+```
