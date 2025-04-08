@@ -1,1 +1,0 @@
-Smriti Pehim Limbu
