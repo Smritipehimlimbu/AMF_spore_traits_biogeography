@@ -15,24 +15,34 @@ if (!requireNamespace("devtools", quietly = TRUE))
     install.packages("devtools")
 if (!requireNamespace("pacman", quietly = TRUE))
     install.packages("pacman")
+if (!requireNamespace("janitor", quietly = TRUE))
+    install.packages("janitor")
+if (!requireNamespace("geodata", quietly = TRUE))
+    install.packages("geodata")
+if (!requireNamespace("sp", quietly = TRUE))
+    install.packages("sp")
 if (!requireNamespace("mycobank", quietly = TRUE))
     devtools::install_github("gzahn/mycobank")
 
 library(pacman)
 library(mycobank)
-pacman::p_load(tidyverse, mycobank)
+pacman::p_load(tidyverse, mycobank, janitor, geodata, sp)
 ```
 
 #uploading data
 
 ```{r}
-df_biogeography <- read.csv(file.path(L0_dir, "AMF_Biogeography_Database_June_2023.csv"), stringsAsFactors = FALSE) #Stürmer dataset
-full_database_df <- readRDS("C:/Users/smrit/OneDrive - Dartmouth College/AMF_spore_biogeography/full_database_df.RDS") #Zahn dataset
+df_biogeography <- read_csv("rawdata/AMF_Biogeography_Database_June_2023.csv") #Stürmer dataset
+full_database_df <- readRDS("rawdata/full_database_df.RDS") #Zahn dataset
 ```
+
+
 
 #Changing species names of Zahn dataset for merge
 
 ```{r}
+
+
 # Create a named vector of replacements
 name_corrections <- c(
   "Claroideoglomus candidum" = "Entrophospora candidum",
@@ -57,7 +67,7 @@ name_corrections <- c(
 
 # Apply the replacements, change latitude and longitude spellings, and group by sequences
 df_global.am <- full_database_df %>%
-  mutate(good.names = recode(good.names, !!!name_corrections)) %>%
+  mutate(good.names = recode(Species, !!!name_corrections)) %>%
   dplyr::rename(
     Latitude_Decimal = latitude,
     Longitude_Decimal = longitude
@@ -94,7 +104,7 @@ df_biogeography_lat.long.decimal <- within(df_biogeography.a, {
              Longitude_Decimal <- ifelse(East_West=="E", Longitude_Decimal, -Longitude_Decimal)
 })
 
-unique(df_biogeography_lat.long.decimal.clean$good.names)
+unique(df_biogeography_lat.long.decimal$good.names)
 ```
 
 ##Editing and cleaning species names in Stürmer dataset for merge
@@ -250,145 +260,188 @@ df_biogeography_lat.long.decimal.clean <- df_biogeography_lat.long.decimal %>% m
 #Further cleaning and editing of Stürmer dataset 
 
 ```{r}
+
+df_biogeography_lat.long.decimal.clean %>%
+  filter(!is.na(Latitude_Decimal)) %>% 
+  filter(!is.na(Longitude_Decimal)) %>% mutate(Year=case_when(Year =="105"~"2015", TRUE~Year)) %>%
+  mutate(Year=case_when(Year == "199"~ "1991", TRUE~Year)) %>% 
+  mutate(Year=case_when(Year=="20042004"~"2004", TRUE~Year)) %>% 
+  mutate(Year=case_when(Year=="19891989"~"1989", TRUE~Year)) %>%  names
 #mutate id for Stürmer dataset starting from 1430 and select only necessary columns
-df_biogeography.final <- df_biogeography_lat.long.decimal.clean %>%filter(!is.na(Latitude_Decimal)) %>% filter(!is.na(Longitude_Decimal)) %>% mutate(Year=case_when(Year =="105"~"2015", TRUE~Year)) %>% mutate(Year=case_when(Year == "199"~ "1991", TRUE~Year)) %>% mutate(Year=case_when(Year=="20042004"~"2004", TRUE~Year)) %>% mutate(Year=case_when(Year=="19891989"~"1989", TRUE~Year)) %>%  mutate(site=paste(Reference.Title, Latitude_Decimal, Longitude_Decimal, sep = "_")) %>% group_by(site) %>%
-  mutate(id = 1429 + cur_group_id()) %>% ungroup() %>%  dplyr::select(-c(Order, Family, Genus, Species, Biogeographical.Realm, Ecol.Region, Community, Continent, Country, State_Province, Location, Lat_Degrees, Lat_Min, Lat_Sec,North_South, Lat_Origin, Long_Degrees, Long_Min, Long_Sec, East_West, Long_Origin, Hemisphere, Soil.P, Soil.N, Soil.C, Organic.Matter, Temp_Data, Prec_Origin, Altitude, Altitude_Origin, Other.Literature., Description., Heavy.Metals, Collector, Notes, pH, Eco.region, site, Year, Reference.Title))
+df_biogeography.final <- df_biogeography_lat.long.decimal.clean %>%
+  filter(!is.na(Latitude_Decimal)) %>% 
+  filter(!is.na(Longitude_Decimal)) %>% mutate(Year=case_when(Year =="105"~"2015", TRUE~Year)) %>%
+  mutate(Year=case_when(Year == "199"~ "1991", TRUE~Year)) %>% 
+  mutate(Year=case_when(Year=="20042004"~"2004", TRUE~Year)) %>% 
+  mutate(Year=case_when(Year=="19891989"~"1989", TRUE~Year)) %>%  
+  mutate(site=paste(`Reference Title`, Latitude_Decimal, Longitude_Decimal, sep = "_")) %>% 
+  group_by(site) %>%
+  mutate(id = 1429 + cur_group_id()) %>% 
+  ungroup() %>%  
+  dplyr::select(-c(Order, Family, Genus, Species, `Biogeographical Realm`, `Ecol Region`, Community, Continent, Country, State_Province, Location, Lat_Degrees, Lat_Min, Lat_Sec,North_South, Lat_Origin, Long_Degrees, Long_Min, Long_Sec, East_West, Long_Origin, Hemisphere, `Soil P`, `Soil N`, `Soil C`, `Organic Matter`, Temp_Data, Prec_Origin, Altitude, Altitude_Origin, `Other Literature?`, `Description?`, `Heavy Metals`, Collector, Notes, pH, `Eco region`, site, Year, `Reference Title`))
+df_biogeography.final <- janitor::clean_names(df_biogeography.final)
+
 ```
 
 #Joining Zahn and Stürmer datasets
 ```{r}
-df_metadata<- merge(df_global.am , df_biogeography.final, by=c("good.names", "Latitude_Decimal", "Longitude_Decimal", "id"), all = TRUE)
+df_global.am <- janitor::clean_names(df_global.am)
+names(df_biogeography.final)
+df_metadata<- merge(df_global.am , df_biogeography.final, by=c("good_names", "latitude_decimal", "longitude_decimal", "id"), all = TRUE)
 
-length(unique(df_metadata$good.names))
+length(unique(df_metadata$good_names))
 
-df_metadata$Soil.pH=as.numeric(df_metadata$Soil.pH)
+df_metadata$soil_p_h=as.numeric(df_metadata$soil_p_h)
 
 #edit relevant columns
-df_metadata.correction1 <- df_metadata %>% mutate(Biome=coalesce(Biome.x, Biome.y)) %>% dplyr::select(-c("Biome.x", "Biome.y")) %>% mutate(sample_type=coalesce(sample_type, Source)) %>% dplyr::select(-Source) %>% mutate(soil.pH=coalesce(pH, Soil.pH)) %>% dplyr::select(-c("pH", "Soil.pH")) %>% mutate(across(c("Host"), ~na_if(.x, ""))) 
+df_metadata %>% names
+df_metadata.correction1 <- 
+  df_metadata %>% 
+  mutate(biome=coalesce(biome.x, biome.y)) %>% 
+  dplyr::select(-c("biome.x", "biome.y")) %>% mutate(sample_type=coalesce(sample_type, source)) %>% dplyr::select(-source) %>% mutate(soil.pH=coalesce(p_h, soil_p_h)) %>% dplyr::select(-c("p_h", "soil_p_h")) %>% mutate(across(c("host"), ~na_if(.x, ""))) 
 
 #edit biome information
-df_metadata.final <- df_metadata.correction1%>% mutate(Biome = case_when(
-    Biome == "Tropical and Subtropical Grasslands, Savannas and Shrublands" ~ "Grassland",
-    Biome == "Temperate Broadleaf and Mixed Forests" ~ "Forest",
-    Biome == "Tropical and Subtropical Moist Broadleaf Forests" ~ "Forest",
-    Biome == "Temperate Grasslands, Savannas and Shrublands" ~ "Grassland",
-    Biome == "Temperate Conifer Forests" ~ "Forest",
-    Biome == "Mediterranean Forests, Woodlands and Scrub" ~ "Forest",
-    Biome == "Flooded Grasslands and Savannas" ~ "Grassland",
-    Biome == "Tropical and Subtropical Dry Broadleaf Forests" ~ "Forest",
-    Biome == "Deserts and Xeric Shrublands" ~ "Desert",
-    Biome == "Tropical and Subtropical Coniferous Forests" ~ "Forest",
-    Biome == "Montane Grasslands and Shrublands" ~ "Grassland",
-    Biome == "Tundra" ~ "Tundra",
-    Biome == "Mangroves" ~ "Forest",
-    Biome == "Boreal Forests/Taiga" ~ "Forest",
-    Biome == "Mediterranean Forest, Woodlands & Scrubs" ~ "Forest",
-    Biome == "Temperate Broadleaf & Mixed Forests" ~ "Forest",
-    Biome == "Boreal Forest/Taiga" ~ "Forest",
-    Biome == "Desert and Xeric Shrublands" ~ "Desert",
-    Biome=="woodland"~"Forest",
-    Biome=="forest"~"Forest",
-    Biome=="shrubland"~"Shrubland",
-    Biome=="tundra"~"Tundra",
-    Biome=="anthropogenic"~"Anthropogenic",
-    Biome=="aquatic"~"Aquatic",
-    Biome=="desert"~"Desert",
-    Biome=="grassland"~"Grassland",
-    Biome=="cropland"~"Cropland",
-    Biome=="wetland"~"Wetland",
-    TRUE ~ Biome
+df_metadata.final <- df_metadata.correction1%>% mutate(biome = case_when(
+    biome == "Tropical and Subtropical Grasslands, Savannas and Shrublands" ~ "Grassland",
+    biome == "Temperate Broadleaf and Mixed Forests" ~ "Forest",
+    biome == "Tropical and Subtropical Moist Broadleaf Forests" ~ "Forest",
+    biome == "Temperate Grasslands, Savannas and Shrublands" ~ "Grassland",
+    biome == "Temperate Conifer Forests" ~ "Forest",
+    biome == "Mediterranean Forests, Woodlands and Scrub" ~ "Forest",
+    biome == "Flooded Grasslands and Savannas" ~ "Grassland",
+    biome == "Tropical and Subtropical Dry Broadleaf Forests" ~ "Forest",
+    biome == "Deserts and Xeric Shrublands" ~ "Desert",
+    biome == "Tropical and Subtropical Coniferous Forests" ~ "Forest",
+    biome == "Montane Grasslands and Shrublands" ~ "Grassland",
+    biome == "Tundra" ~ "Tundra",
+    biome == "Mangroves" ~ "Forest",
+    biome == "Boreal Forests/Taiga" ~ "Forest",
+    biome == "Mediterranean Forest, Woodlands & Scrubs" ~ "Forest",
+    biome == "Temperate Broadleaf & Mixed Forests" ~ "Forest",
+    biome == "Boreal Forest/Taiga" ~ "Forest",
+    biome == "Desert and Xeric Shrublands" ~ "Desert",
+    biome=="woodland"~"Forest",
+    biome=="forest"~"Forest",
+    biome=="shrubland"~"Shrubland",
+    biome=="tundra"~"Tundra",
+    biome=="anthropogenic"~"Anthropogenic",
+    biome=="aquatic"~"Aquatic",
+    biome=="desert"~"Desert",
+    biome=="grassland"~"Grassland",
+    biome=="cropland"~"Cropland",
+    biome=="wetland"~"Wetland",
+    TRUE ~ biome
   ))
 ```
 
 #Extract worldclim data for all lat long data points
-
+# refactored code to use terra package infrastructures
 ```{r}
-#long, lat file
-df_long.lat <- df_metadata.final %>% dplyr::select(Longitude_Decimal, Latitude_Decimal) %>% unique()
+# Step 1: Get unique long/lat
+df_long.lat <- df_metadata.final %>%
+  select(longitude_decimal, latitude_decimal) %>%
+  distinct() %>%
+  rename(lon = longitude_decimal, lat = latitude_decimal)
+points_vect <- vect(df_long.lat, geom = c("lon", "lat"), crs = "EPSG:4326")
+# Step 2: Download WorldClim data (mean monthly temperature at 10' resolution)
+worldclim_tmean <- worldclim_global(var = "tavg", res = 10, path = tempdir(), version = "2.1")
 
-# Download WorldClim temperature data (tmean) at 10 minutes resolution
-worldclim_tmean <- worldclim_global(var = "tavg",res = 10, path = tempdir(), version = "2.1")
-worldclim_tmean_list<- stack(worldclim_tmean)
+# Step 3: Convert long/lat dataframe to SpatVector
+points.tmean <- vect(df_long.lat, geom = c("lon", "lat"), crs = crs(worldclim_tmean))
 
-points.tmean <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_tmean_list)))
-values.tmean <- extract(worldclim_tmean_list,points.tmean)
-df_extracted_from_worldclim.tmean <- cbind.data.frame(coordinates(points.tmean),values.tmean)
-colnames(df_extracted_from_worldclim.tmean)
-df_worldclim.tmean <- df_extracted_from_worldclim.tmean %>% rowwise() %>%  mutate(mean_annual_temp_worldclim = mean(c_across(starts_with("wc2.1_10m_tavg_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_tavg_"))
+# Step 4: Extract temperature values for all months (12 layers)
+values.tmean <- extract(worldclim_tmean, points.tmean)
 
-# Download WorldClim precipitation data (prec) at 10 minutes resolution
-worldclim_prec <- worldclim_global(var = "prec", res = 10, path = tempdir(), version="2.1")
-worldclim_prec_list<- stack(worldclim_prec)
+# Step 5: Combine with coordinates (drop ID column from extract output)
+df_extracted_from_worldclim.tmean <- cbind(df_long.lat, values.tmean[,-1])
 
-points.prec <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_prec_list)))
-values.prec <- extract(worldclim_prec_list,points.prec)
-df_extracted_from_worldclim.prec <- cbind.data.frame(coordinates(points.prec),values.prec)
-colnames(df_extracted_from_worldclim.prec)
-df_worldclim.prec <- df_extracted_from_worldclim.prec %>% rowwise() %>%  mutate(mean_annual_prec_worldclim = mean(c_across(starts_with("wc2.1_10m_prec_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_prec_"))
+# Step 6: Calculate mean annual temperature
+df_worldclim.tmean <- df_extracted_from_worldclim.tmean %>%
+  rowwise() %>%
+  mutate(mean_annual_temp_worldclim = mean(c_across(starts_with("wc2.1_10m_tavg_")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(lon, lat, mean_annual_temp_worldclim)
 
-#tmin
+# precip
+worldclim_prec <- worldclim_global(var = "prec", res = 10, path = tempdir(), version = "2.1")
+values.prec <- extract(worldclim_prec, points_vect)
+df_worldclim.prec <- cbind(df_long.lat, values.prec[,-1]) %>%
+  rowwise() %>%
+  mutate(mean_annual_prec_worldclim = mean(c_across(starts_with("wc2.1_10m_prec_")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(lon, lat, mean_annual_prec_worldclim)
+
+# min temp
 worldclim_tmin <- worldclim_global(var = "tmin", res = 10, path = tempdir(), version = "2.1")
-worldclim_tmin_list<- stack(worldclim_tmin)
+values.tmin <- extract(worldclim_tmin, points_vect)
+df_worldclim.tmin <- cbind(df_long.lat, values.tmin[,-1]) %>%
+  rowwise() %>%
+  mutate(mean_annual_tmin_worldclim = mean(c_across(starts_with("wc2.1_10m_tmin_")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(lon, lat, mean_annual_tmin_worldclim)
 
-points.tmin <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_tmin_list)))
-values.tmin <- extract(worldclim_tmin_list,points.tmin)
-df_extracted_from_worldclim.tmin <- cbind.data.frame(coordinates(points.tmin),values.tmin)
-
-colnames(df_extracted_from_worldclim.tmin)
-df_worldclim.tmin <- df_extracted_from_worldclim.tmin %>% rowwise() %>%  mutate(mean_annual_tmin_worldclim = mean(c_across(starts_with("wc2.1_10m_tmin_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_tmin_"))
-
-#tmax
+# max temp
 worldclim_tmax <- worldclim_global(var = "tmax", res = 10, path = tempdir(), version = "2.1")
-worldclim_tmax_list<- stack(worldclim_tmax)
+values.tmax <- extract(worldclim_tmax, points_vect)
+df_worldclim.tmax <- cbind(df_long.lat, values.tmax[,-1]) %>%
+  rowwise() %>%
+  mutate(mean_annual_tmax_worldclim = mean(c_across(starts_with("wc2.1_10m_tmax_")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(lon, lat, mean_annual_tmax_worldclim)
 
-points.tmax <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_tmax_list)))
-values.tmax <- extract(worldclim_tmax_list,points.tmax)
-df_extracted_from_worldclim.tmax <- cbind.data.frame(coordinates(points.tmax),values.tmax)
-colnames(df_extracted_from_worldclim.tmax)
-df_worldclim.tmax <- df_extracted_from_worldclim.tmax %>% rowwise() %>%  mutate(mean_annual_tmax_worldclim = mean(c_across(starts_with("wc2.1_10m_tmax_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_tmax_"))
-
-#wind
+# wind
 worldclim_wind <- worldclim_global(var = "wind", res = 10, path = tempdir(), version = "2.1")
-worldclim_wind_list<- stack(worldclim_wind)
-points <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_wind_list)))
-values <- extract(worldclim_wind_list,points)
-df_extracted_from_worldclim.wind <- cbind.data.frame(coordinates(points),values)
-colnames(df_extracted_from_worldclim.wind)
+values.wind <- extract(worldclim_wind, points_vect)
+df_worldclim.wind <- cbind(df_long.lat, values.wind[,-1]) %>%
+  rowwise() %>%
+  mutate(mean_annual_wind = mean(c_across(starts_with("wc2.1_10m_wind_")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(lon, lat, mean_annual_wind)
 
-df_worldclim.wind <- df_extracted_from_worldclim.wind %>% rowwise() %>%  mutate(mean_annual_wind = mean(c_across(starts_with("wc2.1_10m_wind_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_wind_"))
-
-##vapor pressure
+# vapor pressure
 worldclim_vapor <- worldclim_global(var = "vapr", res = 10, path = tempdir(), version = "2.1")
-worldclim_vapor_list<- stack(worldclim_vapor)
-points.vapor <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_vapor_list)))
-values.vapor <- extract(worldclim_vapor_list,points.vapor)
-df_extracted_from_worldclim.vapor <- cbind.data.frame(coordinates(points.vapor),values.vapor)
+values.vapor <- extract(worldclim_vapor, points_vect)
+df_worldclim.vapor <- cbind(df_long.lat, values.vapor[,-1]) %>%
+  rowwise() %>%
+  mutate(mean_annual_vapor_worldclim = mean(c_across(starts_with("wc2.1_10m_vapr_")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(lon, lat, mean_annual_vapor_worldclim)
 
-colnames(df_extracted_from_worldclim.vapor)
-df_worldclim.vapor <- df_extracted_from_worldclim.vapor %>% rowwise() %>%  mutate(mean_annual_vapor_worldclim = mean(c_across(starts_with("wc2.1_10m_vapr_")), na.rm = TRUE)) %>% dplyr::select(-starts_with("wc2.1_10m_vapr_"))
-
-##bio
+# bioclim variables
 worldclim_bio <- worldclim_global(var = "bio", res = 10, path = tempdir(), version = "2.1")
-worldclim_bio_list<- stack(worldclim_bio)
+values.bio <- extract(worldclim_bio, points_vect)
+df_worldclim.bio <- cbind(df_long.lat, values.bio[,-1]) %>%
+  rename(
+    Prec.max.worldclim = wc2.1_10m_bio_16,
+    Prec.min.worldclim = wc2.1_10m_bio_17,
+    Prec.seasonality.worldclim = wc2.1_10m_bio_15,
+    Prec.annual.worldclim = wc2.1_10m_bio_12,
+    Temp.seasonality.worldclim = wc2.1_10m_bio_4,
+    Temp.annual.worldclim = wc2.1_10m_bio_1,
+    Temp.max.worldclim = wc2.1_10m_bio_5,
+    Temp.min.worldclim = wc2.1_10m_bio_6
+  ) %>%
+  select(lon, lat, everything())
 
-points.bio <- SpatialPoints(coords = df_long.lat, proj4string = CRS(proj4string(worldclim_bio_list)))
-values.bio <- extract(worldclim_bio_list,points.bio)
-df_extracted_from_worldclim.bio <- cbind.data.frame(coordinates(points.bio),values.bio)
-colnames(df_extracted_from_worldclim.bio)
-df_worldclim.bio <- df_extracted_from_worldclim.bio %>% rename(Prec.max.worldclim=wc2.1_10m_bio_16)%>% rename(Prec.min.worldclim=wc2.1_10m_bio_17)%>% rename(Prec.seasonality.worldclim=wc2.1_10m_bio_15)%>% rename(Prec.annual.worldclim=wc2.1_10m_bio_12)%>% rename(Temp.seasonality.worldclim=wc2.1_10m_bio_4)%>% rename(Temp.annual.worldclim=wc2.1_10m_bio_1)%>% rename(Temp.max.worldclim=wc2.1_10m_bio_5)%>% rename(Temp.min.worldclim=wc2.1_10m_bio_6) %>% dplyr::select(-starts_with("wc2.1_10m_bio_"))
 
 #combine the worldclim data files
-df_world.clim.all.variables <- merge(df_worldclim.bio, df_worldclim.vapor,  by = c("Longitude_Decimal", "Latitude_Decimal"), all.x= TRUE)
-                                  
-df_world.clim.all.variables <- merge(df_world.clim.all.variables, df_worldclim.wind, by = c("Longitude_Decimal", "Latitude_Decimal"), all.x= TRUE)
+df_world.clim.all.variables <- df_worldclim.bio %>%
+  left_join(df_worldclim.vapor, by = c("lon", "lat")) %>%
+  left_join(df_worldclim.wind, by = c("lon", "lat")) %>%
+  left_join(df_worldclim.tmax, by = c("lon", "lat")) %>%
+  left_join(df_worldclim.tmin, by = c("lon", "lat")) %>%
+  left_join(df_worldclim.prec, by = c("lon", "lat"))
+
+
 ```
 
 #Joining worldclim data to the df_metadata.final data
 
 ```{r}
-df_metadata.final.with.worldclim <- merge(df_metadata.final, df_world.clim.all.variables, by =c("Longitude_Decimal", "Latitude_Decimal"), all=FALSE) %>% unique()
+df_metadata.final <- df_metadata.final %>% rename(lon=longitude_decimal,lat=latitude_decimal)
+df_metadata.final.with.worldclim <- merge(df_metadata.final, df_world.clim.all.variables, by =c("lon", "lat"), all=FALSE) %>% unique()
 str(df_metadata.final.with.worldclim)
-df_metadata.final.with.worldclim$Precipitation=as.numeric(df_metadata.final.with.worldclim$Precipitation)
+df_metadata.final.with.worldclim$precipitation=as.numeric(df_metadata.final.with.worldclim$precipitation)
 
 #cleaning it further
 unique(df_metadata.final.with.worldclim$sample_type)
@@ -396,25 +449,50 @@ unique(df_metadata.final.with.worldclim$sample_type)
 df_metadata.final.with.worldclim <- df_metadata.final.with.worldclim %>% mutate(sample_type=case_when(sample_type =="Field spores"~"Field", sample_type == "Field soil"~ "Field", sample_type=="Field sporse"~"Field", sample_type=="Field Soil"~"Field", sample_type=="Field Spores"~"Field", sample_type=="Fields"~"Field",sample_type=="FieldField"~"Field", sample_type=="Fields spores"~"Field", sample_type=="Pot Culture"~"Trap_culture", sample_type=="Pot Cultures"~"Trap_culture", sample_type=="Pot culture"~"Trap_culture", sample_type=="Pot cultures"~"Trap_culture", sample_type=="Trap cultures"~"Trap_culture", sample_type=="Trap culture"~"Trap_culture", sample_type=="Por culture"~"Trap_culture", sample_type=="Molecular data"~"Molecular_data",sample_type=="Molecular Data"~"Molecular_data",sample_type=="Moelcular data"~"Molecular_data", sample_type=="Molecular data "~"Molecular_data", sample_type=="Molecualr data"~"Molecular_data", sample_type=="Y Sfairi"~"Trap_culture",sample_type=="soil"~"Field",sample_type=="topsoil"~"Field",sample_type=="rhizosphere soil"~"Field",sample_type=="root"~"Field",TRUE~sample_type)) 
 
 #Cleaning ppt data from Sturmer dataset
-df_metadata.final.clean <- df_metadata.final.with.worldclim %>% mutate(Precipitation = case_when(Precipitation == 101310~1013.1, Precipitation == 171450~1714.5, Precipitation == 160970~1609.7, Precipitation == 97890~978.9, Precipitation == 94000~940, Precipitation== 73280~732.8, Precipitation== 72000~720, Precipitation== 65100~651, Precipitation== 60000~600, Precipitation== 56200~562, Precipitation== 53100~531, Precipitation== 51950~519.5, Precipitation== 50500~505, Precipitation== 49380~493.8, Precipitation== 45300~453, Precipitation== 45100~451, Precipitation== 44000~440, Precipitation== 43180~431.8, Precipitation== 40600~406, Precipitation== 38720~387.2, Precipitation== 38600~386, Precipitation== 38550~385.5, Precipitation== 35000~350, Precipitation == 34800~348, Precipitation== 31700~317, Precipitation== 29600~296, Precipitation== 26600~266, Precipitation ==26600~266,Precipitation== 24200~242, Precipitation== 23180~231.8, Precipitation== 22250~222.5, Precipitation== 20912~209.12, Precipitation== 19690~196.9, Precipitation== 19370~193.7, Precipitation== 16800~168, Precipitation== 16755~167.55, Precipitation== 16540~165.4, Precipitation== 11530~115.3, Precipitation== 11530~115.3, Precipitation== 9000~90, Precipitation== 8000~80, Precipitation== 7128~712.8, Precipitation== 7000~70, Precipitation==6700~67, Precipitation== 6132~613.2, Precipitation== 6000~60, Precipitation==5000~50, Precipitation== 4535~453.5, Precipitation== 4375~437.5, Precipitation== 4300~43,Precipitation== 3452~345.2, Precipitation== 3128~312.8, Precipitation==109000~1090, Precipitation==56500~565, TRUE~Precipitation)) #cleaning precipitation from Sidney's database
+df_metadata.final.clean <- df_metadata.final.with.worldclim %>% mutate(precipitation = case_when(precipitation == 101310~1013.1, precipitation == 171450~1714.5, precipitation == 160970~1609.7, precipitation == 97890~978.9, precipitation == 94000~940, precipitation== 73280~732.8, precipitation== 72000~720, precipitation== 65100~651, precipitation== 60000~600, precipitation== 56200~562, precipitation== 53100~531, precipitation== 51950~519.5, precipitation== 50500~505, precipitation== 49380~493.8, precipitation== 45300~453, precipitation== 45100~451, precipitation== 44000~440, precipitation== 43180~431.8, precipitation== 40600~406, precipitation== 38720~387.2, precipitation== 38600~386, precipitation== 38550~385.5, precipitation== 35000~350, precipitation == 34800~348, precipitation== 31700~317, precipitation== 29600~296, precipitation== 26600~266, precipitation ==26600~266,precipitation== 24200~242, precipitation== 23180~231.8, precipitation== 22250~222.5, precipitation== 20912~209.12, precipitation== 19690~196.9, precipitation== 19370~193.7, precipitation== 16800~168, precipitation== 16755~167.55, precipitation== 16540~165.4, precipitation== 11530~115.3, precipitation== 11530~115.3, precipitation== 9000~90, precipitation== 8000~80, precipitation== 7128~712.8, precipitation== 7000~70, precipitation==6700~67, precipitation== 6132~613.2, precipitation== 6000~60, precipitation==5000~50, precipitation== 4535~453.5, precipitation== 4375~437.5, precipitation== 4300~43,precipitation== 3452~345.2, precipitation== 3128~312.8, precipitation==109000~1090, precipitation==56500~565, TRUE~precipitation)) #cleaning precipitation from Sidney's database
 
 #cleaning temperature data from Sturmer database
-df_meta.1 <- df_metadata.final.clean %>% mutate(Temperature = case_when(Temperature==-1000~-10, Temperature==-392~-3.92, Temperature==-170~-1.7, Temperature==-150~-1.5, Temperature== -73~-0.73, Temperature==-26~-0.26, Temperature==-25~-0.25, Temperature==-21~-2.1, Temperature==-17~-1.7, Temperature==8~0.8, Temperature==90~9, Temperature==106~10.6, Temperature==107~10.7, Temperature==110~11, Temperature==112~11.2, Temperature==113~11.3, Temperature==114~11.4, Temperature==115~11.5, Temperature==118~11.8, Temperature==120~1.2, Temperature==123~12.3, Temperature==125~12.5, Temperature==129~12.9, Temperature==137~13.7, Temperature==138~13.8, Temperature==139~13.9, Temperature==147~14.7, Temperature==150~15, Temperature==154~15.4, Temperature==155~15.5, Temperature==160~16, Temperature==161~16.1, Temperature==175~17.5, Temperature==182~18.2, Temperature==183~18.3, Temperature==185~18.5, Temperature==189~18.9, Temperature==190~19, Temperature==197~19.7, Temperature==199~19.9, Temperature==200~20, Temperature==202~20.2, Temperature==205~20.5, Temperature==206~20.6, Temperature==210~21, Temperature==211~21.1, Temperature==212~21.2, Temperature==213~21.3, Temperature==214~21.4, Temperature==217~21.7, Temperature==219~21.9, Temperature==220~22, Temperature==225~22.5, Temperature==229~22.9, Temperature==230~23, Temperature==233~23.3, Temperature==235~23.5, Temperature==237~23.7, Temperature==238~23.8, Temperature==240~24, Temperature==244~24.4, Temperature==249~24.9, Temperature==250~25, Temperature==255~25.5, Temperature==257~25.7, Temperature==258~25.8, Temperature==260~26, Temperature==262~26.2, Temperature==270~27, Temperature==271~27.1, Temperature==272~27.2, Temperature==275~27.5, Temperature==290~2.9, Temperature==300~30, Temperature==311~31.1, Temperature==400~4.9, Temperature==450~4.5, Temperature==475~4.75, Temperature==490~4.9, Temperature==500~5, Temperature==540~5.4, Temperature==570~5.7, Temperature==580~5.8, Temperature==600~6, Temperature==604~6.04, Temperature==610~6.1, Temperature==620~6.2, Temperature==630~6.3, Temperature==650~6.5, Temperature==700~7, Temperature==710~7.1, Temperature==720~7.2, Temperature==750~7.5, Temperature==800~8, Temperature==810~8.1, Temperature==820~8.2, Temperature==830~8.3, Temperature==840~8.4, Temperature==850~8.5, Temperature==880~8.8, Temperature==890~8.9, Temperature==900~9, Temperature==920~9.2, Temperature==923~9.23, Temperature==940~9.4, Temperature==944~9.44, Temperature==950~9.5, Temperature==970~9.7, Temperature==1000~10, Temperature==1100~11, TRUE~Temperature))
+df_meta.1 <- df_metadata.final.clean %>% mutate(temperature = case_when(temperature==-1000~-10, temperature==-392~-3.92, temperature==-170~-1.7, temperature==-150~-1.5, temperature== -73~-0.73, temperature==-26~-0.26, temperature==-25~-0.25, temperature==-21~-2.1, temperature==-17~-1.7, temperature==8~0.8, temperature==90~9, temperature==106~10.6, temperature==107~10.7, temperature==110~11, temperature==112~11.2, temperature==113~11.3, temperature==114~11.4, temperature==115~11.5, temperature==118~11.8, temperature==120~1.2, temperature==123~12.3, temperature==125~12.5, temperature==129~12.9, temperature==137~13.7, temperature==138~13.8, temperature==139~13.9, temperature==147~14.7, temperature==150~15, temperature==154~15.4, temperature==155~15.5, temperature==160~16, temperature==161~16.1, temperature==175~17.5, temperature==182~18.2, temperature==183~18.3, temperature==185~18.5, temperature==189~18.9, temperature==190~19, temperature==197~19.7, temperature==199~19.9, temperature==200~20, temperature==202~20.2, temperature==205~20.5, temperature==206~20.6, temperature==210~21, temperature==211~21.1, temperature==212~21.2, temperature==213~21.3, temperature==214~21.4, temperature==217~21.7, temperature==219~21.9, temperature==220~22, temperature==225~22.5, temperature==229~22.9, temperature==230~23, temperature==233~23.3, temperature==235~23.5, temperature==237~23.7, temperature==238~23.8, temperature==240~24, temperature==244~24.4, temperature==249~24.9, temperature==250~25, temperature==255~25.5, temperature==257~25.7, temperature==258~25.8, temperature==260~26, temperature==262~26.2, temperature==270~27, temperature==271~27.1, temperature==272~27.2, temperature==275~27.5, temperature==290~2.9, temperature==300~30, temperature==311~31.1, temperature==400~4.9, temperature==450~4.5, temperature==475~4.75, temperature==490~4.9, temperature==500~5, temperature==540~5.4, temperature==570~5.7, temperature==580~5.8, temperature==600~6, temperature==604~6.04, temperature==610~6.1, temperature==620~6.2, temperature==630~6.3, temperature==650~6.5, temperature==700~7, temperature==710~7.1, temperature==720~7.2, temperature==750~7.5, temperature==800~8, temperature==810~8.1, temperature==820~8.2, temperature==830~8.3, temperature==840~8.4, temperature==850~8.5, temperature==880~8.8, temperature==890~8.9, temperature==900~9, temperature==920~9.2, temperature==923~9.23, temperature==940~9.4, temperature==944~9.44, temperature==950~9.5, temperature==970~9.7, temperature==1000~10, temperature==1100~11, TRUE~temperature))
                                                                       
-df_meta <- df_meta.1 %>% mutate(Temperature=case_when(Temperature==1200~12, Temperature==1250~12.5, Temperature==1270~12.7, Temperature==1320~13.2, Temperature==1390~13.9, Temperature==1400~14, Temperature==1410~14.10, Temperature==1450~14.5, Temperature==1470~14.7, Temperature==1500~15, Temperature==1520~15.2, Temperature==1550~15.5, Temperature==1560~15.6, Temperature==1590~15.9, Temperature==1620~16.2, Temperature==1650~16.5, Temperature==1665~16.65, Temperature==1670~16.7, Temperature==1680~16.8, Temperature==1690~16.9, Temperature==1700~17, Temperature==1730~17.3, Temperature==1740~17.4, Temperature==1750~17.5, Temperature==1760~17.6, Temperature==1770~17.7, Temperature==1840~18.4, Temperature==1850~18.5, Temperature==1910~19.1, Temperature==1920~19.2, Temperature==1930~19.3, Temperature==1950~19.5, Temperature==1990~19.9, Temperature==2020~20.2, Temperature==2060~20.6, Temperature==2070~20.7, Temperature==2120~21.2, Temperature==2130~21.3, Temperature==2140~21.4, Temperature==2150~21.5, Temperature==2190~21.9, Temperature==2200~22, Temperature==2250~22.5, Temperature==2260~22.6, Temperature==2340~23.4, Temperature==2350~23.5, Temperature==2390~23.9, Temperature==2400~24, Temperature==2460~24.6, Temperature==2467~24.67, Temperature==2490~24.9, Temperature==2500~25, Temperature==2550~25.5, Temperature==2580~25.8, Temperature==2600~26, Temperature==2610~26.1, Temperature==2620~26.2, Temperature==2650~26.5, Temperature==2660~26.6, Temperature==2670~26.7, Temperature==2680~26.8, Temperature==2710~27.1, Temperature==2720~27.2, Temperature==2740~27.4, Temperature==2750~27.5, Temperature==2790~27.9, Temperature==2800~28, Temperature==2950~29.5, Temperature==3000~30, Temperature==3150~31.5, Temperature==730~7.5, Temperature==715~7.15, Temperature==170~1.7,Temperature==780~7.8,Temperature==58~NA, Temperature==760~7.6, Temperature ==740~7.4, Temperature==910~9.1, TRUE~Temperature))
+df_meta <- df_meta.1 %>% mutate(temperature=case_when(temperature==1200~12, temperature==1250~12.5, temperature==1270~12.7, temperature==1320~13.2, temperature==1390~13.9, temperature==1400~14, temperature==1410~14.10, temperature==1450~14.5, temperature==1470~14.7, temperature==1500~15, temperature==1520~15.2, temperature==1550~15.5, temperature==1560~15.6, temperature==1590~15.9, temperature==1620~16.2, temperature==1650~16.5, temperature==1665~16.65, temperature==1670~16.7, temperature==1680~16.8, temperature==1690~16.9, temperature==1700~17, temperature==1730~17.3, temperature==1740~17.4, temperature==1750~17.5, temperature==1760~17.6, temperature==1770~17.7, temperature==1840~18.4, temperature==1850~18.5, temperature==1910~19.1, temperature==1920~19.2, temperature==1930~19.3, temperature==1950~19.5, temperature==1990~19.9, temperature==2020~20.2, temperature==2060~20.6, temperature==2070~20.7, temperature==2120~21.2, temperature==2130~21.3, temperature==2140~21.4, temperature==2150~21.5, temperature==2190~21.9, temperature==2200~22, temperature==2250~22.5, temperature==2260~22.6, temperature==2340~23.4, temperature==2350~23.5, temperature==2390~23.9, temperature==2400~24, temperature==2460~24.6, temperature==2467~24.67, temperature==2490~24.9, temperature==2500~25, temperature==2550~25.5, temperature==2580~25.8, temperature==2600~26, temperature==2610~26.1, temperature==2620~26.2, temperature==2650~26.5, temperature==2660~26.6, temperature==2670~26.7, temperature==2680~26.8, temperature==2710~27.1, temperature==2720~27.2, temperature==2740~27.4, temperature==2750~27.5, temperature==2790~27.9, temperature==2800~28, temperature==2950~29.5, temperature==3000~30, temperature==3150~31.5, temperature==730~7.5, temperature==715~7.15, temperature==170~1.7,temperature==780~7.8,temperature==58~NA, temperature==760~7.6, temperature ==740~7.4, temperature==910~9.1, TRUE~temperature))
 
-unique(df_meta$Precipitation)
+unique(df_meta$precipitation)
 
-unique(df_meta$Temperature)
+unique(df_meta$temperature)
 
 #coalesce temperature and precipitation with mat and map
-
-df_meta <- df_meta %>% mutate(MAP=coalesce(MAP, Precipitation)) %>% dplyr::select(-Precipitation) %>% mutate(MAT= coalesce(MAT, Temperature)) %>% dplyr::select(-Temperature) %>% filter(Biome!="") %>% filter(Biome!= "Rock and Ice")
+df_meta %>% names
+df_meta <- df_meta %>% mutate(map=coalesce(map, precipitation)) %>% dplyr::select(-precipitation) %>% mutate(mat= coalesce(mat, temperature)) %>% dplyr::select(-temperature) %>% filter(biome!="") %>% filter(biome!= "Rock and Ice")
 
 #remove few columns such as traits for the data publication
 
 df_meta_for_data_publication <- df_meta 
-length(unique(df_meta_for_data_publication$good.names))#343
+length(unique(df_meta_for_data_publication$good_names))#343
 
-write.csv(df_meta_for_data_publication, "df_AMF_biogeography.csv")
 ```
+
+
+# clean up species names using mycobank
+```{r}
+df_meta_for_data_publication %>% names
+
+mb <- get_mycobank_db()
+mb_table <- mycobank::get_mycobank_synonyms(df_meta_for_data_publication$good_names,mycobank_db = mb) 
+mycobank_lookup <- data.frame(good_names=mb_table$query,current_name=mb_table$current_name)
+mycobank_taxonomy <- get_mycobank_taxonomy(mycobank_lookup$current_name,mycobank_db = mb)
+mycobank_taxonomy <- data.frame(mycobank_taxonomy = unname(mycobank_taxonomy) %>% str_replace_all(", ",";"),
+           current_name = names(mycobank_taxonomy))
+
+df_meta_for_data_publication <- 
+  df_meta_for_data_publication %>%
+  left_join(mycobank_lookup, by = "good_names") %>%
+  mutate(
+    current_name = coalesce(current_name, good_names)
+  ) %>%
+  left_join(mycobank_taxonomy)
+
+
+write_csv(df_meta_for_data_publication, "df_AMF_biogeography.csv")
+
+```
+
