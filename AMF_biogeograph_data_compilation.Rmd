@@ -6,15 +6,21 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 ```
 
 ##package upload
 ```{r}
+if (!requireNamespace("devtools", quietly = TRUE))
+    install.packages("devtools")
+if (!requireNamespace("pacman", quietly = TRUE))
+    install.packages("pacman")
+if (!requireNamespace("mycobank", quietly = TRUE))
+    devtools::install_github("gzahn/mycobank")
 
-install.packages("pacman")
 library(pacman)
-pacman::p_load(readr, dplyr, tidyverse)
+library(mycobank)
+pacman::p_load(tidyverse, mycobank)
 ```
 
 #uploading data
