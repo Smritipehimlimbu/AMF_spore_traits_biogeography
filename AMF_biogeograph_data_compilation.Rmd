@@ -337,7 +337,7 @@ df_metadata.final <- df_metadata.correction1%>% mutate(biome = case_when(
 #Extract worldclim data for all lat long data points
 # refactored code to use terra package infrastructures
 ```{r}
-# Step 1: Get unique long/lat
+# Get unique long/lat
 df_long.lat <- df_metadata.final %>%
   select(longitude_decimal, latitude_decimal) %>%
   distinct() %>%
@@ -346,16 +346,16 @@ points_vect <- vect(df_long.lat, geom = c("lon", "lat"), crs = "EPSG:4326")
 # Step 2: Download WorldClim data (mean monthly temperature at 10' resolution)
 worldclim_tmean <- worldclim_global(var = "tavg", res = 10, path = tempdir(), version = "2.1")
 
-# Step 3: Convert long/lat dataframe to SpatVector
+# Convert long/lat dataframe to SpatVector
 points.tmean <- vect(df_long.lat, geom = c("lon", "lat"), crs = crs(worldclim_tmean))
 
-# Step 4: Extract temperature values for all months (12 layers)
+# Extract temperature values for all months (12 layers)
 values.tmean <- extract(worldclim_tmean, points.tmean)
 
-# Step 5: Combine with coordinates (drop ID column from extract output)
+# Combine with coordinates (drop ID column from extract output)
 df_extracted_from_worldclim.tmean <- cbind(df_long.lat, values.tmean[,-1])
 
-# Step 6: Calculate mean annual temperature
+# Calculate mean annual temperature
 df_worldclim.tmean <- df_extracted_from_worldclim.tmean %>%
   rowwise() %>%
   mutate(mean_annual_temp_worldclim = mean(c_across(starts_with("wc2.1_10m_tavg_")), na.rm = TRUE)) %>%
