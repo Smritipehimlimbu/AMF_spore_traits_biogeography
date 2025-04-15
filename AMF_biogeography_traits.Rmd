@@ -1,0 +1,106 @@
+---
+title: "AMF_biogeography_traits"
+author: "Smriti Pehim Limbu"
+date: "2025-04-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##package upload
+```{r}
+
+install.packages("pacman")
+library(pacman)
+pacman::p_load(readr, dplyr, tidyverse)
+```
+
+#upload traits data and edit for merge
+```{r}
+df_calculated_traits <- read_csv("C:/Users/f00763s/OneDrive - Dartmouth College/AMF_spore_biogeography/DataRecord_1_CalculatedTraitMetrics_18Jun2024.csv")
+
+#Only using MorphA for dimorhpic species in the TraitAM database
+#Since the morphs A and G exist in TraitAM, taking only the morph A(acaulosporoid) and removing morphG from the good.names
+
+df_calculated_traits.clean <- df_calculated_traits %>%   filter(!grepl("morphG$", good.names)) %>%   mutate(good.names=case_when(good.names=="Acaulospora_brasiliensis_morphG" ~"Acaulospora_brasiliensis", good.names==	
+"Ambispora_appendicula_morphG"~"Ambispora_appendicula", good.names=="Ambispora_fennica_morphG"~"Ambispora_fennica", good.names=="Ambispora_gerdemannii_morphG"~	"Ambispora_gerdemannii", good.names=="Ambispora_granatensis_morphG"~"Ambispora_granatensis", good.names=="Ambispora_leptoticha_morphG"~"Ambispora_leptoticha", good.names=="Archaeospora_ecuadoriana_morphG"~"	
+Archaeospora_ecuadoriana", good.names=="Archaeospora_spainii_morphG"~"Archaeospora_spainii", TRUE~good.names))
+
+#remove _ from the good.names for merge 
+df_calculated_traits.clean$good.names <- gsub("_", " ", df_calculated_traits.clean$good.names)
+
+#changing col names for merge
+colnames(df_calculated_traits.clean)[which(names(df_calculated_traits.clean) == "order")] <- "Order"
+colnames(df_calculated_traits.clean)[which(names(df_calculated_traits.clean) == "family")] <- "Family"
+colnames(df_calculated_traits.clean)[which(names(df_calculated_traits.clean) == "genus")] <- "Genus"
+
+# Trim spaces from the species name
+df_calculated_traits.clean$good.names <- trimws(df_calculated_traits.clean$good.names)
+```
+
+#Merging biogeography data with traits data
+
+```{r}
+#upload biogeography data
+df_AMF_biogeography <- read_csv("C:/Users/f00763s/OneDrive - Dartmouth College/AMF_spore_biogeography/df_AMF_biogeography.csv")
+
+#Adding traits to df_AMF_biogeography
+#deselect columns
+df_calculated_traits.clean.2 <- df_calculated_traits.clean %>% dplyr::select(-c(Genus, Family, Order))
+
+#Join
+df_metadata <- merge(df_AMF_biogeography, df_calculated_traits.clean.2, by = "good.names", all = FALSE)
+length(unique(df_metadata$good.names)) #303
+
+```
+#Calculate the percentage of traits available per site
+```{r}
+df_data_sites_species_traits <- merge(df_AMF_biogeography, df_calculated_traits.clean.2, by = "good.names", all = TRUE)
+length(unique(df_data_sites_species_traits$good.names)) #384
+
+colnames(df_data_sites_species_traits)
+
+trait_coverage <- df_data_sites_species_traits %>%
+  group_by(id) %>%
+  dplyr::summarise(
+    n_total = n_distinct(good.names),
+    n_with_traits = n_distinct(good.names[!is.na(vol_mean) & !is.na(shape_median) & 
+                                       !is.na(color_most) & !is.na(investment_mean) & 
+                                       !is.na(orn_height_mean)]),
+    coverage = n_with_traits / n_total
+  )
+
+#Visualize the trait data coverage
+str(trait_coverage)
+
+# Reorder id properly before plotting
+trait_coverage <- trait_coverage %>%
+  arrange(coverage) %>%
+  mutate(id_ordered = factor(id, levels = id))
+
+#Add breaks per 10 sites
+breaks_to_show <- levels(trait_coverage$id_ordered)[seq(1, length(levels(trait_coverage$id_ordered)), by = 10)]
+
+Trait_coverage_fig <- ggplot(trait_coverage, aes(x = id_ordered, y = coverage)) +
+  geom_segment(aes(x = id_ordered, xend = id_ordered, y = 0, yend = coverage), color = "gray70") +
+  geom_point(size = 2, color = "steelblue") +
+  geom_hline(yintercept = 0.2, linetype = "dashed", color = "red") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "Trait Data Coverage per Site",
+    x = "Site",
+    y = "Proportion of Species with Trait Data"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_line(color = "black"),
+    plot.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank()
+  )+ scale_x_discrete(breaks = breaks_to_show)
+
+ggsave("Trait_coverage_fig.tiff", plot = Trait_coverage_fig, width = 8, height = 6, dpi = 300)
+
+```
